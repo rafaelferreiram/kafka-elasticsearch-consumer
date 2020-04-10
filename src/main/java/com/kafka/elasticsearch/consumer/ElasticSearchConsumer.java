@@ -26,6 +26,7 @@ import org.elasticsearch.common.xcontent.XContentType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.gson.JsonParser;
 import com.kafka.elasticsearch.config.ConfigConstants;
 
 public class ElasticSearchConsumer {
@@ -41,17 +42,22 @@ public class ElasticSearchConsumer {
 			ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
 
 			for (ConsumerRecord<String, String> record : records) {
+				String id = extractIdFromTweet(record.value());
 
-				IndexRequest indexRequest = new IndexRequest("twitter", "tweets").source(record.value(),
+				IndexRequest indexRequest = new IndexRequest("twitter", "tweets",id).source(record.value(),
 						XContentType.JSON);
 				IndexResponse response = client.index(indexRequest, RequestOptions.DEFAULT);
-				String responseId = response.getId();
-				logger.info(responseId);
+				logger.info(response.getId());
 
 			}
 		}
 
 		// client.close();
+	}
+
+	private static String extractIdFromTweet(String tweetJson) {
+		JsonParser jsonParser = new JsonParser();
+		return jsonParser.parse(tweetJson).getAsJsonObject().get("id_str").getAsString();
 	}
 
 	public static KafkaConsumer<String, String> createConsumer() {
