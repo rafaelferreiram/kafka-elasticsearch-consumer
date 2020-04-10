@@ -41,15 +41,19 @@ public class ElasticSearchConsumer {
 		while (true) {
 			ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
 
+			logger.info("Received "+records.count() +" records");
 			for (ConsumerRecord<String, String> record : records) {
 				String id = extractIdFromTweet(record.value());
 
-				IndexRequest indexRequest = new IndexRequest("twitter", "tweets",id).source(record.value(),
-						XContentType.JSON);
-				IndexResponse response = client.index(indexRequest, RequestOptions.DEFAULT);
+				IndexRequest indexRequest = new IndexRequest().index("twitter").type("tweets").id(id)
+						.source(record.value(), XContentType.JSON);
+				IndexResponse response = client.index(indexRequest, RequestOptions.DEFAULT); 
 				logger.info(response.getId());
 
 			}
+			logger.info("Commiting offsets ...");
+			consumer.commitSync();
+			logger.info("Offsets Commited!");
 		}
 
 		// client.close();
@@ -68,9 +72,9 @@ public class ElasticSearchConsumer {
 		properties.setProperty(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
 		properties.setProperty(ConsumerConfig.GROUP_ID_CONFIG, ConfigConstants.elasticSearchGroup);
 		properties.setProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, ConfigConstants.earliestOffset);
-
+		properties.setProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+		properties.setProperty(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "10");
 		// create consumer
-		@SuppressWarnings("resource")
 		KafkaConsumer<String, String> consumer = new KafkaConsumer<String, String>(properties);
 
 		// subscribe consumer
