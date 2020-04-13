@@ -41,14 +41,20 @@ public class ElasticSearchConsumer {
 		while (true) {
 			ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
 
-			logger.info("Received "+records.count() +" records");
+			logger.info("Received " + records.count() + " records ");
 			for (ConsumerRecord<String, String> record : records) {
 				String id = extractIdFromTweet(record.value());
 
 				IndexRequest indexRequest = new IndexRequest().index("twitter").type("tweets").id(id)
 						.source(record.value(), XContentType.JSON);
-				IndexResponse response = client.index(indexRequest, RequestOptions.DEFAULT); 
+				IndexResponse response = client.index(indexRequest, RequestOptions.DEFAULT);
 				logger.info(response.getId());
+				try {
+					Thread.sleep(200);
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
 
 			}
 			logger.info("Commiting offsets ...");
@@ -73,7 +79,6 @@ public class ElasticSearchConsumer {
 		properties.setProperty(ConsumerConfig.GROUP_ID_CONFIG, ConfigConstants.elasticSearchGroup);
 		properties.setProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, ConfigConstants.earliestOffset);
 		properties.setProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
-		properties.setProperty(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "10");
 		// create consumer
 		KafkaConsumer<String, String> consumer = new KafkaConsumer<String, String>(properties);
 
@@ -83,6 +88,12 @@ public class ElasticSearchConsumer {
 		return consumer;
 	}
 
+	public static RestHighLevelClient createClientLocal() {
+		RestHighLevelClient client = new RestHighLevelClient(
+				RestClient.builder(HttpHost.create(ConfigConstants.hostnameLocal)));
+		return client;
+	}
+
 	public static RestHighLevelClient createClient() {
 		// Credential provider being used becahse is connecting to elasticSearch on
 		// cloud, if was running local, wasn't necessary
@@ -90,7 +101,7 @@ public class ElasticSearchConsumer {
 		credentialProvider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials(
 				ConfigConstants.usernameCredential, ConfigConstants.passwordCredential));
 
-		RestClientBuilder clientBuilder = RestClient.builder(new HttpHost(ConfigConstants.hostname, 443, "https"))
+		RestClientBuilder clientBuilder = RestClient.builder(new HttpHost(ConfigConstants.hostnameCloud, 443, "https"))
 				.setHttpClientConfigCallback(new RestClientBuilder.HttpClientConfigCallback() {
 
 					public HttpAsyncClientBuilder customizeHttpClient(HttpAsyncClientBuilder httpClientBuilder) {
@@ -101,5 +112,4 @@ public class ElasticSearchConsumer {
 		RestHighLevelClient client = new RestHighLevelClient(clientBuilder);
 		return client;
 	}
-
 }
