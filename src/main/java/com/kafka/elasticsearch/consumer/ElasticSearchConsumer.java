@@ -16,8 +16,9 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.elasticsearch.action.bulk.BulkRequest;
+import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestClientBuilder;
@@ -41,25 +42,37 @@ public class ElasticSearchConsumer {
 		while (true) {
 			ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
 
-			logger.info("Received " + records.count() + " records ");
-			for (ConsumerRecord<String, String> record : records) {
-				String id = extractIdFromTweet(record.value());
+			int recordCounts = records.count();
+			logger.info("Received " + recordCounts + " records ");
+			BulkRequest bulkRequest = new BulkRequest();
 
-				IndexRequest indexRequest = new IndexRequest().index("twitter").type("tweets").id(id)
-						.source(record.value(), XContentType.JSON);
-				IndexResponse response = client.index(indexRequest, RequestOptions.DEFAULT);
-				logger.info(response.getId());
+			for (ConsumerRecord<String, String> record : records) {
+
 				try {
-					Thread.sleep(200);
+					String id = extractIdFromTweet(record.value());
+
+					IndexRequest indexRequest = new IndexRequest().index("twitter").type("tweets").id(id)
+							.source(record.value(), XContentType.JSON);
+
+					bulkRequest.add(indexRequest); // adding index request to the bulk
+				} catch (NullPointerException e) {
+					logger.warn("Skipping bad data :" + record.value());
+				}
+
+			}
+
+			if (recordCounts > 0) {
+				BulkResponse bulkResponse = client.bulk(bulkRequest, RequestOptions.DEFAULT);
+				logger.info("Commiting offsets ...");
+				consumer.commitSync();
+				logger.info("Offsets Commited!");
+				try {
+					Thread.sleep(100);
 				} catch (InterruptedException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
-
 			}
-			logger.info("Commiting offsets ...");
-			consumer.commitSync();
-			logger.info("Offsets Commited!");
 		}
 
 		// client.close();
@@ -79,6 +92,7 @@ public class ElasticSearchConsumer {
 		properties.setProperty(ConsumerConfig.GROUP_ID_CONFIG, ConfigConstants.elasticSearchGroup);
 		properties.setProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, ConfigConstants.earliestOffset);
 		properties.setProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+		properties.setProperty(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "100");
 		// create consumer
 		KafkaConsumer<String, String> consumer = new KafkaConsumer<String, String>(properties);
 
